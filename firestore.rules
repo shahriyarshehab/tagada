@@ -1,0 +1,153 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() <= 128)) &&
+             (!('photoUrl' in data) || data.photoUrl == null || (data.photoUrl is string && data.photoUrl.size() <= 1024)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidContact(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.phone is string && data.phone.size() <= 50 &&
+             data.contactGroup is string && data.contactGroup.size() <= 50 &&
+             (!('type' in data) || data.type == null || (data.type is string && data.type.size() <= 50)) &&
+             (!('status' in data) || data.status == null || (data.status is string && data.status.size() <= 50)) &&
+             (!('paidDate' in data) || data.paidDate == null || (data.paidDate is string && data.paidDate.size() <= 100)) &&
+             (!('date' in data) || data.date == null || (data.date is string && data.date.size() <= 100)) &&
+             (!('monthCallCount' in data) || data.monthCallCount is int || data.monthCallCount is float) &&
+             (!('isFavorite' in data) || data.isFavorite is bool) &&
+             (!('leadStatus' in data) || data.leadStatus == null || (data.leadStatus is string && data.leadStatus.size() <= 50)) &&
+             (!('callHistory' in data) || data.callHistory is list) &&
+             (!('fin' in data) || data.fin is map) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidReminder(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.datetime is string && data.datetime.size() <= 100 &&
+             (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 50)) &&
+             (!('group' in data) || data.group == null || (data.group is string && data.group.size() <= 50)) &&
+             (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 500)) &&
+             (!('done' in data) || data.done is bool) &&
+             (!('callId' in data) || data.callId == null || data.callId is string || data.callId is int || data.callId is float) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidQuickNote(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.date is string && data.date.size() <= 100 &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidPayHistory(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             (data.month is int || data.month is float) &&
+             (data.year is int || data.year is float) &&
+             data.status is string && data.status.size() <= 50 &&
+             (!('callId' in data) || data.callId == null || data.callId is string || data.callId is int || data.callId is float) &&
+             (!('paidDate' in data) || data.paidDate == null || (data.paidDate is string && data.paidDate.size() <= 100)) &&
+             (!('callsBeforePaid' in data) || data.callsBeforePaid is int || data.callsBeforePaid is float) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidHisabTx(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.type is string && (data.type == 'in' || data.type == 'dep') &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             (data.amt is int || data.amt is float) &&
+             data.date is string && data.date.size() <= 50 &&
+             (!('note' in data) || data.note == null || (data.note is string && data.note.size() <= 500)) &&
+             (!('src' in data) || data.src == null || (data.src is string && data.src.size() <= 200)) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidHisabReminder(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.due is string && data.due.size() <= 100 &&
+             (!('done' in data) || data.done is bool) &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && incoming().userId == userId && isValidUser(incoming());
+      allow delete: if isOwner(userId);
+
+      match /contacts/{contactId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(contactId) && incoming().userId == userId && isValidContact(incoming());
+        allow delete: if isOwner(userId) && isValidId(contactId);
+      }
+
+      match /reminders/{reminderId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(reminderId) && incoming().userId == userId && isValidReminder(incoming());
+        allow delete: if isOwner(userId) && isValidId(reminderId);
+      }
+
+      match /notes/{noteId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(noteId) && incoming().userId == userId && isValidQuickNote(incoming());
+        allow delete: if isOwner(userId) && isValidId(noteId);
+      }
+
+      match /payHistory/{historyId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(historyId) && incoming().userId == userId && isValidPayHistory(incoming());
+        allow delete: if isOwner(userId) && isValidId(historyId);
+      }
+
+      match /hisabTx/{txId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(txId) && incoming().userId == userId && isValidHisabTx(incoming());
+        allow delete: if isOwner(userId) && isValidId(txId);
+      }
+
+      match /hisabReminders/{remId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(remId) && incoming().userId == userId && isValidHisabReminder(incoming());
+        allow delete: if isOwner(userId) && isValidId(remId);
+      }
+    }
+  }
+}

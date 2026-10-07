@@ -1,0 +1,150 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The user ID" },
+        "email": { "type": "string", "description": "The user email" },
+        "displayName": { "type": "string", "description": "Display name" },
+        "photoUrl": { "type": "string", "description": "Avatar photo URL" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update server timestamp" }
+      },
+      "required": ["userId", "email"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "Tagada CRM Contact record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Contact ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Contact name" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "contactGroup": { "type": "string", "description": "Contact group" },
+        "type": { "type": "string", "description": "Call type status" },
+        "status": { "type": "string", "description": "Paid status for Active group" },
+        "paidDate": { "type": "string", "description": "ISO timestamp when paid" },
+        "date": { "type": "string", "description": "Creation or latest activity date" },
+        "monthCallCount": { "type": "integer", "description": "Calls made in current month" },
+        "callHistory": { "type": "array", "description": "List of call timestamp strings" },
+        "isFavorite": { "type": "boolean", "description": "Starred favorite" },
+        "leadStatus": { "type": "string", "description": "Survey lead status: none, green, yellow, red" },
+        "fin": { "type": "object", "description": "Financial details map" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "name", "phone", "contactGroup"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Follow-up reminder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Reminder ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "callId": { "type": "string", "description": "Associated contact ID" },
+        "name": { "type": "string", "description": "Contact name" },
+        "phone": { "type": "string", "description": "Contact phone" },
+        "group": { "type": "string", "description": "Contact group" },
+        "datetime": { "type": "string", "description": "ISO target datetime" },
+        "note": { "type": "string", "description": "Reminder note" },
+        "done": { "type": "boolean", "description": "Completion flag" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "name", "datetime"]
+    },
+    "QuickNote": {
+      "title": "QuickNote",
+      "description": "Dashboard quick note",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Note ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "text": { "type": "string", "description": "Note text" },
+        "date": { "type": "string", "description": "ISO creation date" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "text", "date"]
+    },
+    "PayHistory": {
+      "title": "PayHistory",
+      "description": "Monthly payment archive",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Record ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "callId": { "type": "string", "description": "Contact ID" },
+        "name": { "type": "string", "description": "Contact name" },
+        "month": { "type": "integer", "description": "Month number" },
+        "year": { "type": "integer", "description": "Year number" },
+        "status": { "type": "string", "description": "Paid status" },
+        "paidDate": { "type": "string", "description": "Paid date" },
+        "callsBeforePaid": { "type": "integer", "description": "Calls before payment" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "name", "month", "year", "status"]
+    },
+    "HisabTransaction": {
+      "title": "HisabTransaction",
+      "description": "Hisab Khata ledger transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Transaction ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "type": { "type": "string", "description": "Type: in or dep" },
+        "name": { "type": "string", "description": "Customer/Account name" },
+        "amt": { "type": "number", "description": "Amount in BDT" },
+        "date": { "type": "string", "description": "Date YYYY-MM-DD" },
+        "note": { "type": "string", "description": "Note" },
+        "src": { "type": "string", "description": "Source of funds" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "type", "name", "amt", "date"]
+    },
+    "HisabReminder": {
+      "title": "HisabReminder",
+      "description": "Hisab Khata due alert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Reminder ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Account name" },
+        "due": { "type": "string", "description": "Due ISO datetime" },
+        "done": { "type": "boolean", "description": "Status done" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update server timestamp" }
+      },
+      "required": ["id", "userId", "name", "due"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile"
+    },
+    "/users/{userId}/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "User contacts"
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "User follow-up reminders"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": "QuickNote",
+      "description": "User dashboard quick notes"
+    },
+    "/users/{userId}/payHistory/{historyId}": {
+      "schema": "PayHistory",
+      "description": "User monthly payment history"
+    },
+    "/users/{userId}/hisabTx/{txId}": {
+      "schema": "HisabTransaction",
+      "description": "User hisab khata ledger entries"
+    },
+    "/users/{userId}/hisabReminders/{remId}": {
+      "schema": "HisabReminder",
+      "description": "User hisab alerts"
+    }
+  }
+}
