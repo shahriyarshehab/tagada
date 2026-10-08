@@ -14,14 +14,6 @@
       },
       "oauth_client": [
         {
-          "client_id": "260345216903-9tfu0vigglo2le9lrij2dbs1oki3agr1.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.aistudio.tagadacrm.kxmpzq",
-            "certificate_hash": "ea30d52d1728cee54781cee6e1fc0b680e5b8b1c"
-          }
-        },
-        {
           "client_id": "260345216903-sc0oq8g72rmgd6nh5na7cunhaihclfa5.apps.googleusercontent.com",
           "client_type": 3
         }
