@@ -3,21 +3,30 @@ package com.example.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.auth.AuthManager
 import com.example.data.model.*
 import com.example.data.repository.TagadaRepository
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 class TagadaViewModel(application: Application) : AndroidViewModel(application) {
-
     val repository = TagadaRepository(application)
 
     // Navigation and UI state
@@ -33,8 +42,69 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
     val hisabSubTab = MutableStateFlow("summary") // summary, in, dep, notes, reminders
     val hisabSearch = MutableStateFlow("")
 
+    // Calls Screen sub-tab: "crm_contacts", "call_log", "device_contacts"
+    val callsSubTab = MutableStateFlow("crm_contacts")
+    val callLogFilter = MutableStateFlow("all") // "all", "missed", "received", "dialed"
+
     val currentUser = MutableStateFlow<FirebaseUser?>(AuthManager.currentUser)
     val toastMessage = MutableStateFlow<String?>(null)
+
+    // AI High Thinking state
+    val aiInsightText = MutableStateFlow<String?>(null)
+    val isAiThinking = MutableStateFlow(false)
+
+    private val prefs = application.getSharedPreferences("tagada_prefs", android.content.Context.MODE_PRIVATE)
+    val autoIncludeInDevice = MutableStateFlow(prefs.getBoolean("auto_include_device_contacts", true))
+    val askConfirmationBeforeSave = MutableStateFlow(prefs.getBoolean("ask_confirm_save_contact", true))
+    val autoIncludePhoneToApp = MutableStateFlow(prefs.getBoolean("auto_include_phone_to_app", true))
+
+    fun setAutoIncludeInDevice(enabled: Boolean) {
+        autoIncludeInDevice.value = enabled
+        prefs.edit().putBoolean("auto_include_device_contacts", enabled).apply()
+    }
+
+    fun setAskConfirmationBeforeSave(enabled: Boolean) {
+        askConfirmationBeforeSave.value = enabled
+        prefs.edit().putBoolean("ask_confirm_save_contact", enabled).apply()
+    }
+
+    fun setAutoIncludePhoneToApp(enabled: Boolean) {
+        autoIncludePhoneToApp.value = enabled
+        prefs.edit().putBoolean("auto_include_phone_to_app", enabled).apply()
+    }
+
+    fun saveContact(name: String, phone: String, group: String, alsoSaveToDevice: Boolean) {
+        repository.addContact(name, phone, group, alsoSaveToDevice)
+        if (alsoSaveToDevice) {
+            showToast("Saved to CRM & Device Contacts!")
+        } else {
+            showToast("Saved to CRM Contacts")
+        }
+        loadDeviceData()
+    }
+
+    fun autoIncludeAllDeviceContacts(targetGroup: String = "General") {
+        val unimported = repository.deviceContacts.value.filter { !it.isAlreadyInCrm }
+        if (unimported.isEmpty()) {
+            showToast("All device contacts are already in Tagada CRM!")
+            return
+        }
+        val count = repository.importDeviceContacts(unimported, targetGroup)
+        showToast("Auto-included $count device contacts into Tagada CRM!")
+        loadDeviceData()
+    }
+
+    fun forceSecureFirestoreSync() {
+        viewModelScope.launch {
+            val user = AuthManager.currentUser
+            if (user == null) {
+                showToast("Sign in with Google to enable Firestore cloud sync")
+            } else {
+                repository.syncWithFirestore()
+                showToast("Cloud sync complete: Data secured in Firestore")
+            }
+        }
+    }
 
     val contacts: StateFlow<List<Contact>> = repository.contacts.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
@@ -64,6 +134,22 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope, SharingStarted.WhileSubscribed(5000), false
     )
 
+    val deviceContacts: StateFlow<List<DeviceContact>> = repository.deviceContacts.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val deviceCallLogs: StateFlow<List<DeviceCallLog>> = repository.deviceCallLogs.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val isLoadingDeviceData: StateFlow<Boolean> = repository.isLoadingDeviceData.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), false
+    )
+
+    private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
     fun showToast(msg: String) {
         toastMessage.value = msg
     }
@@ -74,6 +160,25 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setUser(user: FirebaseUser?) {
         currentUser.value = user
+    }
+
+    fun loadDeviceData() {
+        repository.loadDeviceData()
+    }
+
+    fun importSelectedDeviceContacts(selected: List<DeviceContact>, group: String) {
+        val count = repository.importDeviceContacts(selected, group)
+        showToast("$count Device Contacts imported to $group")
+        repository.loadDeviceData() // Refresh device contacts list with updated status
+    }
+
+    fun syncCallHistoryFromDevice() {
+        val updatedCount = repository.syncCallHistoryFromDeviceLogs()
+        if (updatedCount > 0) {
+            showToast("Synced $updatedCount calls from device history into CRM!")
+        } else {
+            showToast("No new matching device calls to sync.")
+        }
     }
 
     // --- Computed Hisab People ---
@@ -117,12 +222,11 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
     fun computeHisabAdvice(people: List<HisabPerson>): List<HisabAdvice> {
         val creditors = people.filter { it.bal > 0 }.map { it to it.bal }.sortedByDescending { it.second }.toMutableList()
         val debtors = people.filter { it.bal < 0 }.map { it to -it.bal }.sortedByDescending { it.second }.toMutableList()
-        val adviceList = mutableListOf<HisabAdvice>()
 
+        val adviceList = mutableListOf<HisabAdvice>()
         for (c in creditors) {
             var need = c.second
             val suggestions = mutableListOf<HisabSuggestion>()
-
             for (dIdx in debtors.indices) {
                 val d = debtors[dIdx]
                 if (need <= 0 || d.second <= 0) continue
@@ -138,7 +242,6 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 )
             }
-
             adviceList.add(
                 HisabAdvice(
                     person = c.first.name,
@@ -150,6 +253,73 @@ class TagadaViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         return adviceList
+    }
+
+    // --- AI High Thinking Analysis (gemini-3.1-pro-preview with ThinkingLevel.HIGH) ---
+    fun generateHighThinkingAudit(promptSummary: String) {
+        viewModelScope.launch {
+            isAiThinking.value = true
+            aiInsightText.value = null
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    val apiKey = try {
+                        val buildConfigClass = Class.forName("com.example.BuildConfig")
+                        val field = buildConfigClass.getField("GEMINI_API_KEY")
+                        field.get(null) as? String ?: ""
+                    } catch (e: Exception) {
+                        ""
+                    }
+
+                    if (apiKey.isBlank()) {
+                        return@withContext "AI Analysis: Gemini API key is not configured in Secrets panel. Please provide GEMINI_API_KEY to enable AI High Thinking."
+                    }
+
+                    val systemInstruction = "You are Tagada CRM & Hisab Khata senior financial strategist. Analyze call performance, arrears recovery, and debtor-creditor reconciliation with deep reasoning."
+                    val fullPrompt = "$systemInstruction\n\nData Summary:\n$promptSummary\n\nProvide deep strategic recommendations to optimize debt collection, call follow-ups, and ledger settlement."
+
+                    val jsonBody = JSONObject().apply {
+                        val contentsArray = JSONArray().apply {
+                            put(JSONObject().apply {
+                                val partsArray = JSONArray().apply {
+                                    put(JSONObject().apply { put("text", fullPrompt) })
+                                }
+                                put("parts", partsArray)
+                            })
+                        }
+                        put("contents", contentsArray)
+                        val config = JSONObject().apply {
+                            val thinkingConfig = JSONObject().apply {
+                                put("thinkingLevel", "HIGH")
+                            }
+                            put("thinkingConfig", thinkingConfig)
+                        }
+                        put("generationConfig", config)
+                    }
+
+                    val request = Request.Builder()
+                        .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=$apiKey")
+                        .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
+                        .build()
+
+                    val res = okHttpClient.newCall(request).execute()
+                    val resString = res.body?.string() ?: ""
+                    if (!res.isSuccessful) {
+                        "AI error (${res.code}): ${JSONObject(resString).optJSONObject("error")?.optString("message") ?: res.message}"
+                    } else {
+                        val root = JSONObject(resString)
+                        val candidates = root.optJSONArray("candidates")
+                        val content = candidates?.optJSONObject(0)?.optJSONObject("content")
+                        val parts = content?.optJSONArray("parts")
+                        parts?.optJSONObject(0)?.optString("text") ?: "No response generated."
+                    }
+                }
+                aiInsightText.value = response
+            } catch (e: Exception) {
+                aiInsightText.value = "Analysis failed: ${e.localizedMessage}"
+            } finally {
+                isAiThinking.value = false
+            }
+        }
     }
 
     // Check time filter

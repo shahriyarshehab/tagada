@@ -97,3 +97,27 @@ data class HisabAdvice(
     val needRem: Double,
     val suggestions: List<HisabSuggestion>
 )
+
+enum class DeviceCallType(val label: String) {
+    MISSED("Missed Call"),
+    INCOMING("Received Call"),
+    OUTGOING("Dialed Call"),
+    REJECTED("Rejected Call"),
+    OTHER("Call")
+}
+
+data class DeviceCallLog(
+    val id: String,
+    val number: String,
+    val name: String?,
+    val type: DeviceCallType,
+    val dateMillis: Long,
+    val durationSeconds: Long
+)
+
+data class DeviceContact(
+    val id: String,
+    val name: String,
+    val phone: String,
+    val isAlreadyInCrm: Boolean = false
+)

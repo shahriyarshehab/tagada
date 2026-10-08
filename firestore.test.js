@@ -69,7 +69,6 @@ test("Authenticated user: can create and read own contact", async () => {
       contactGroup: "General",
     })
   );
-
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).collection("contacts").doc("c1").get()
   );

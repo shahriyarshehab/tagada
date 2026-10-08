@@ -44,17 +44,24 @@ data class TagadaStrings(
     val signout: String,
     val hotLead: String,
     val warmLead: String,
-    val rejectedLead: String
+    val rejectedLead: String,
+    val deviceCallHistory: String,
+    val deviceContacts: String,
+    val missedCalls: String,
+    val receivedCalls: String,
+    val dialedCalls: String,
+    val syncCallHistory: String,
+    val importDeviceContacts: String
 )
 
 val DICT_EN = TagadaStrings(
     appName = "Tagada",
     appSubtitle = "Smart Call & Hisab Khata CRM",
     dash = "Dashboard",
-    list = "Contact",
+    list = "Contacts & Calls",
     hisab = "Hisab Khata",
     followup = "Follow-up",
-    settings = "Profile",
+    settings = "Settings",
     allGroups = "All Groups",
     connected = "Connected",
     noAnswer = "No Answer",
@@ -86,56 +93,70 @@ val DICT_EN = TagadaStrings(
     signout = "Sign Out",
     hotLead = "Hot Lead",
     warmLead = "Warm Lead",
-    rejectedLead = "Disqualified"
+    rejectedLead = "Disqualified",
+    deviceCallHistory = "Device Call History",
+    deviceContacts = "Device Contacts",
+    missedCalls = "Missed Calls",
+    receivedCalls = "Received Calls",
+    dialedCalls = "Dialed Calls",
+    syncCallHistory = "Sync Recent Calls",
+    importDeviceContacts = "Import Device Contacts"
 )
 
 val DICT_BN = TagadaStrings(
     appName = "তাগাদা",
-    appSubtitle = "স্মার্ট কল ও হিসাব খাতা CRM",
+    appSubtitle = "স্মার্ট কল ও হিসাব খাতা সিআরএম",
     dash = "ড্যাশবোর্ড",
-    list = "কন্টাক্ট",
+    list = "যোগাযোগ ও কল",
     hisab = "হিসাব খাতা",
     followup = "ফলো-আপ",
-    settings = "প্রোফাইল",
+    settings = "সেটিংস",
     allGroups = "সব গ্রুপ",
-    connected = "যোগাযোগ হয়েছে",
-    noAnswer = "উত্তর নেই",
-    notContacted = "কল করা হয়নি",
+    connected = "সংযুক্ত",
+    noAnswer = "রিসিভ করেনি",
+    notContacted = "যোগাযোগ হয়নি",
     paidList = "পরিশোধিত তালিকা",
-    unpaidList = "বকেয়া তালিকা",
-    favorites = "গুরুত্বপূর্ণ",
+    unpaidList = "বকেয়া তালিকা",
+    favorites = "পছন্দের",
     notes = "দ্রুত নোট",
-    typeNote = "নোট লিখুন (অটো সেভ হবে)...",
+    typeNote = "নোট লিখুন...",
     save = "সংরক্ষণ",
-    search = "নাম অথবা মোবাইল নম্বর খুঁজুন...",
+    search = "নাম বা ফোন নম্বর খুঁজুন...",
     addNew = "নতুন যোগাযোগ",
-    allTime = "সব সময়",
+    allTime = "সর্বমোট",
     days = "দিন",
-    finAdd = "হিসাব +",
-    loan = "লোন",
-    due = "বকেয়া",
+    finAdd = "অর্থায়ন +",
+    loan = "ঋণ",
+    due = "বকেয়া",
     paid = "পরিশোধিত",
-    unpaid = "বকেয়া বাকি",
+    unpaid = "বকেয়া পাওনা",
     cloudSync = "গুগল ড্রাইভ ব্যাকআপ",
-    lang = "ভাষা নির্বাচন",
+    lang = "ভাষা",
     darkMode = "ডার্ক মোড",
-    googleLogin = "গুগল একাউন্ট লগইন",
-    googleConnected = "গুগল কানেক্টেড",
-    googleLoginBtn = "Google দিয়ে লগইন করুন",
-    vcfUploadSettings = "VCF কন্টাক্ট আপলোড",
-    vcfUploadDesc = "ফোনের .vcf ফাইল সহজে যেকোনো গ্রুপে আনুন",
+    googleLogin = "গুগল অ্যাকাউন্ট লগইন",
+    googleConnected = "গুগল সংযুক্ত",
+    googleLoginBtn = "গুগল দিয়ে সাইন ইন",
+    vcfUploadSettings = "ভিএফসি ফাইল আপলোড",
+    vcfUploadDesc = "ডিভাইস থেকে কন্টাক্ট আপলোড করুন",
     welcomeGoogle = "স্বাগতম",
-    signout = "লগআউট",
-    hotLead = "সম্ভাবনাময়",
-    warmLead = "বিবেচনাধীন",
-    rejectedLead = "বাদ দেওয়া"
+    signout = "সাইন আউট",
+    hotLead = "হট লিড",
+    warmLead = "ওয়ার্ম লিড",
+    rejectedLead = "বাতিল",
+    deviceCallHistory = "ডিভাইস কল হিস্ট্রি",
+    deviceContacts = "ডিভাইস কন্টাক্টস",
+    missedCalls = "মিসড কল",
+    receivedCalls = "রিসিভড কল",
+    dialedCalls = "ডায়ালড কল",
+    syncCallHistory = "কল হিস্ট্রি সিঙ্ক করুন",
+    importDeviceContacts = "ডিভাইস কন্টাক্ট আনুন"
 )
 
 fun getStrings(lang: String): TagadaStrings = if (lang == "bn") DICT_BN else DICT_EN
 
 fun moneyFmt(n: Double): String {
     val rounded = Math.round(Math.abs(n))
-    return "৳" + String.format(Locale.US, "%,d", rounded)
+    return "৳ " + String.format(Locale.US, "%,d", rounded)
 }
 
 fun dtFmt(d: String): String {

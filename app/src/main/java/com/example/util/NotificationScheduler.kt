@@ -10,9 +10,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.example.receiver.ReminderNotificationReceiver
+import java.util.UUID
 
 object NotificationScheduler {
-
     fun hasNotificationPermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -50,14 +50,12 @@ object NotificationScheduler {
     ) {
         initChannel(context)
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
         val intent = Intent(context, ReminderNotificationReceiver::class.java).apply {
             putExtra(ReminderNotificationReceiver.EXTRA_REMINDER_ID, reminderId)
             putExtra(ReminderNotificationReceiver.EXTRA_NAME, name)
             putExtra(ReminderNotificationReceiver.EXTRA_PHONE, phone)
             putExtra(ReminderNotificationReceiver.EXTRA_NOTE, note)
         }
-
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             reminderId.hashCode(),

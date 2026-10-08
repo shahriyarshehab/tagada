@@ -67,6 +67,7 @@ class TagadaRepositoryRuleTest : FirestoreEmulatorTestBase() {
   fun readContacts_unauthenticated_failsWithPermissionDenied() = runBlocking {
     val aliceUid = signInTestUser(ALICE_EMAIL)
     val docRef = firestore.collection("users").document(aliceUid).collection("contacts").document("alice_c2")
+
     withTimeout(DEFAULT_TIMEOUT_MS) {
       docRef.set(
         mapOf(
@@ -81,7 +82,6 @@ class TagadaRepositoryRuleTest : FirestoreEmulatorTestBase() {
 
     // Sign out to test unauthenticated access
     auth.signOut()
-
     try {
       withTimeout(DEFAULT_TIMEOUT_MS) {
         docRef.get().await()

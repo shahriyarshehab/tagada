@@ -23,9 +23,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 object AuthManager {
-
     val currentUser: FirebaseUser?
         get() = Firebase.auth.currentUser
+
+    private fun getServerClientId(context: Context): String? {
+        return try {
+            context.getString(R.string.default_web_client_id)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     fun attemptAutoSignIn(
         context: Context,
@@ -40,13 +47,10 @@ object AuthManager {
             return
         }
 
-        val clientId = try {
-            context.getString(R.string.default_web_client_id)
-        } catch (e: Exception) {
+        val clientId = getServerClientId(context) ?: run {
             onUnauthenticated()
             return
         }
-
         val googleIdOption = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(true)
             .setServerClientId(clientId)
@@ -83,13 +87,10 @@ object AuthManager {
         onCancelled: () -> Unit,
         scope: CoroutineScope
     ) {
-        val clientId = try {
-            activity.getString(R.string.default_web_client_id)
-        } catch (e: Exception) {
-            onAuthError("Google Sign-In configuration missing")
+        val clientId = getServerClientId(activity) ?: run {
+            onAuthError("Google Sign-In configuration missing: default_web_client_id not found")
             return
         }
-
         val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
         val request = GetCredentialRequest.Builder()
             .addCredentialOption(signInOption)

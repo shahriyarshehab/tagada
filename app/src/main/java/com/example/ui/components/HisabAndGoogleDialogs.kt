@@ -358,11 +358,16 @@ fun GoogleLoginDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Google Account Login", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TagadaLogoBadge(size = 32.dp)
+                        Text("Cloud Firestore Account", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
                     }
                 }
+
+                FirestoreSecurityBadge(isCloudSynced = user != null)
 
                 if (user != null) {
                     Box(
@@ -378,7 +383,7 @@ fun GoogleLoginDialog(
                     }
                     Text(user.displayName ?: "Google User", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(user.email ?: "", fontSize = 12.sp, color = Color.Gray)
-                    Text("✓ Google Verified Account Connected", fontSize = 11.sp, color = Color(0xFF34D399), fontWeight = FontWeight.SemiBold)
+                    Text("✓ Secured End-to-End Firestore Sync Active", fontSize = 11.sp, color = Color(0xFF34D399), fontWeight = FontWeight.SemiBold)
 
                     Button(
                         onClick = onSignOutClicked,
@@ -390,12 +395,11 @@ fun GoogleLoginDialog(
                     }
                 } else {
                     Text(
-                        "Connect your Google account to sync Tagada contacts and Hisab Khata records securely with Cloud Firestore and Google Drive.",
+                        "Sign in with Google to securely store your Tagada CRM contacts, reminders, and Hisab Khata transactions in Firebase Firestore with strict user data isolation and cloud backup.",
                         fontSize = 12.sp,
                         color = Color.LightGray,
                         lineHeight = 18.sp
                     )
-
                     Button(
                         onClick = onSignInClicked,
                         modifier = Modifier.fillMaxWidth().testTag("google_sign_in_button"),
@@ -417,7 +421,10 @@ fun SummaryAnalysisDialog(
     received: Int,
     missedAndRejected: Int,
     top10List: List<Pair<String, Int>>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRunAiAudit: (() -> Unit)? = null,
+    aiResultText: String? = null,
+    isAiThinking: Boolean = false
 ) {
     var selectedSubTab by remember { mutableStateOf("summary") }
 
@@ -425,88 +432,166 @@ fun SummaryAnalysisDialog(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = Color(0xFF080C16),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
                         onClick = { selectedSubTab = "summary" },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedSubTab == "summary") Color(0xFF6366F1) else Color(0xFF1E293B)
                         )
                     ) {
-                        Text("Call Summary", fontSize = 11.sp)
+                        Text("Summary", fontSize = 11.sp)
                     }
                     Button(
                         onClick = { selectedSubTab = "analysis" },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (selectedSubTab == "analysis") Color(0xFF6366F1) else Color(0xFF1E293B)
                         )
                     ) {
-                        Text("Top 10 Contacts", fontSize = 11.sp)
+                        Text("Top 10", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = { selectedSubTab = "ai" },
+                        modifier = Modifier.weight(1.1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedSubTab == "ai") Color(0xFF7C3AED) else Color(0xFF1E293B)
+                        )
+                    ) {
+                        Text("AI Audit ✨", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                if (selectedSubTab == "summary") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Total Contacts", fontSize = 10.sp, color = Color.Gray)
-                                    Text("$totalContacts", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                when (selectedSubTab) {
+                    "summary" -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Total Contacts", fontSize = 10.sp, color = Color.Gray)
+                                        Text("$totalContacts", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                                    }
+                                }
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Dialed Calls", fontSize = 10.sp, color = Color(0xFF34D399))
+                                        Text("$dialed", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF34D399))
+                                    }
                                 }
                             }
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Dialed Calls", fontSize = 10.sp, color = Color(0xFF34D399))
-                                    Text("$dialed", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF34D399))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Received Calls", fontSize = 10.sp, color = Color(0xFF38BDF8))
+                                        Text("$received", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF38BDF8))
+                                    }
                                 }
-                            }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Received Calls", fontSize = 10.sp, color = Color(0xFF38BDF8))
-                                    Text("$received", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF38BDF8))
-                                }
-                            }
-                            Card(
-                                modifier = Modifier.weight(1f),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Missed / No Answer", fontSize = 10.sp, color = Color(0xFFF87171))
-                                    Text("$missedAndRejected", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFFF87171))
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF11192D))
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Missed / No Answer", fontSize = 10.sp, color = Color(0xFFF87171))
+                                        Text("$missedAndRejected", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFFF87171))
+                                    }
                                 }
                             }
                         }
                     }
-                } else {
-                    LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(top10List) { (name, count) ->
+                    "analysis" -> {
+                        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(top10List) { (name, count) ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().background(Color(0xFF0D1424), RoundedCornerShape(10.dp)).padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("$count calls", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF818CF8))
+                                }
+                            }
+                            if (top10List.isEmpty()) {
+                                item {
+                                    Text("No call history recorded yet", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.padding(20.dp))
+                                }
+                            }
+                        }
+                    }
+                    "ai" -> {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().background(Color(0xFF0D1424), RoundedCornerShape(10.dp)).padding(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                Text("$count calls", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF818CF8))
+                                Text("High Thinking AI Audit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA78BFA))
+                                if (onRunAiAudit != null) {
+                                    Button(
+                                        onClick = onRunAiAudit,
+                                        enabled = !isAiThinking,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(26.dp),
+                                        shape = RoundedCornerShape(6.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                                    ) {
+                                        Text(if (isAiThinking) "Thinking..." else "Run Audit", fontSize = 10.sp, color = Color.White)
+                                    }
+                                }
                             }
-                        }
-                        if (top10List.isEmpty()) {
-                            item {
-                                Text("No call history recorded yet", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.padding(20.dp))
+
+                            if (isAiThinking) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFFA78BFA))
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text("Gemini 3.1 Pro Thinking Mode High...", fontSize = 11.sp, color = Color.LightGray)
+                                }
+                            } else if (!aiResultText.isNullOrBlank()) {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .background(Color(0xFF111827), RoundedCornerShape(12.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    item {
+                                        Text(aiResultText, fontSize = 11.sp, color = Color(0xFFE2E8F0), lineHeight = 16.sp)
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .background(Color(0xFF111827), RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Tap 'Run Audit' to get deep AI reasoning on collection priorities, high-risk overdue arrears, and optimal follow-up schedule.",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }

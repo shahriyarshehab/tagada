@@ -7,12 +7,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,15 +27,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.credentials.CredentialManager
+import com.example.R
 import com.example.auth.AuthManager
 import com.example.data.model.*
-import com.example.data.repository.TagadaRepository
 import com.example.ui.components.*
 import com.example.util.NotificationScheduler
 import kotlinx.coroutines.launch
@@ -77,11 +78,18 @@ fun TagadaApp(
     val hisabAcks by viewModel.hisabAcks.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
 
+    val deviceContacts by viewModel.deviceContacts.collectAsState()
+    val aiInsightText by viewModel.aiInsightText.collectAsState()
+    val isAiThinking by viewModel.isAiThinking.collectAsState()
+
     val t = getStrings(lang)
 
     // Modals
     var showFabMenu by remember { mutableStateOf(false) }
     var showAddContactDialog by remember { mutableStateOf(false) }
+    var addContactInitialPhone by remember { mutableStateOf("") }
+    var addContactInitialName by remember { mutableStateOf("") }
+
     var financeModalContact by remember { mutableStateOf<Contact?>(null) }
     var surveyNoteModalContact by remember { mutableStateOf<Contact?>(null) }
     var reminderModalContact by remember { mutableStateOf<Contact?>(null) }
@@ -91,9 +99,10 @@ fun TagadaApp(
     var editingHisabTx by remember { mutableStateOf<HisabTx?>(null) }
     var showGoogleModal by remember { mutableStateOf(false) }
     var showSummaryAnalysisModal by remember { mutableStateOf(false) }
+    var showImportDeviceContactsModal by remember { mutableStateOf(false) }
+
     var drillDownListTitle by remember { mutableStateOf<String?>(null) }
     var drillDownListData by remember { mutableStateOf<List<Contact>>(emptyList()) }
-
     var quickNoteInput by remember { mutableStateOf("") }
     var settingsGroupTarget by remember { mutableStateOf("General") }
 
@@ -140,7 +149,6 @@ fun TagadaApp(
             val fileName = "Tagada_Backup_${currentUser?.email?.substringBefore('@') ?: "local"}_${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.json"
             val cacheFile = File(context.cacheDir, fileName)
             cacheFile.writeText(json)
-
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", cacheFile)
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/json"
@@ -152,7 +160,6 @@ fun TagadaApp(
             context.startActivity(Intent.createChooser(sendIntent, "Backup to Google Drive or Share"))
             viewModel.showToast("Complete Tagada & Hisab Backup Ready!")
         } catch (e: Exception) {
-            // Fallback: save to internal and show toast
             viewModel.showToast("Backup created in local storage")
         }
     }
@@ -183,14 +190,15 @@ fun TagadaApp(
             matchesTime && matchesGroup
         }
     }
+
     val connectedList = remember(filteredContacts) {
         filteredContacts.filter { it.type == "dialed" || it.type == "received" || it.callHistory.isNotEmpty() }
     }
     val unpaidList = remember(filteredContacts) {
-        filteredContacts.filter { it.status == "unpaid" && (it.contactGroup == "Active" || it.contactGroup == "চলতি") }
+        filteredContacts.filter { it.status == "unpaid" && (it.contactGroup == "Active" || it.contactGroup == "Active Member") }
     }
     val paidList = remember(filteredContacts) {
-        filteredContacts.filter { it.status == "paid" && (it.contactGroup == "Active" || it.contactGroup == "চলতি") }
+        filteredContacts.filter { it.status == "paid" && (it.contactGroup == "Active" || it.contactGroup == "Active Member") }
     }
     val favoritesList = remember(contacts) {
         contacts.filter { it.isFavorite }
@@ -226,15 +234,9 @@ fun TagadaApp(
     }
 
     val bg = if (darkMode) Color(0xFF040711) else Color(0xFFF8FAFC)
-    val containerBg = if (darkMode) Color(0xFF080C16) else Color(0xFFF1F5F9)
-    val cardBg = if (darkMode) Color(0xFF111827) else Color(0xFFFFFFFF)
-    val borderCol = if (darkMode) Color(0xFF1E293B) else Color(0xFFE2E8F0)
-    val textPrimary = if (darkMode) Color(0xFFF1F5F9) else Color(0xFF0F172A)
-    val textSecondary = if (darkMode) Color(0xFF94A3B8) else Color(0xFF64748B)
 
     Box(modifier = modifier.fillMaxSize().background(bg)) {
         Column(modifier = Modifier.fillMaxSize()) {
-
             // --- 1. TOP BRAND HEADER ---
             Column(
                 modifier = Modifier
@@ -252,42 +254,7 @@ fun TagadaApp(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Brush.linearGradient(listOf(Color(0xFF6366F1), Color(0xFF3B82F6)))),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Phone, contentDescription = "Logo", tint = Color.White, modifier = Modifier.size(18.dp))
-                        }
-                        Column {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    t.appName,
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .background(Color(0x336366F1), RoundedCornerShape(8.dp))
-                                        .border(0.8.dp, Color(0x666366F1), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 6.dp, vertical = 1.dp)
-                                ) {
-                                    Text("CRM", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA5B4FC))
-                                }
-                            }
-                            Text(t.appSubtitle, fontSize = 9.sp, color = Color.Gray)
-                        }
-                    }
+                    TagadaBrandHeader(title = t.appName, subtitle = t.appSubtitle)
 
                     // Google Login / User Avatar
                     Row(
@@ -301,7 +268,6 @@ fun TagadaApp(
                                 color = Color(0xFF6366F1)
                             )
                         }
-
                         if (currentUser != null) {
                             Row(
                                 modifier = Modifier
@@ -346,7 +312,20 @@ fun TagadaApp(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FirestoreSecurityBadge(isCloudSynced = currentUser != null)
+                    Text(
+                        if (currentUser != null) "Cloud Firestore Active" else "Offline / Local Mode",
+                        fontSize = 9.5.sp,
+                        color = Color.LightGray
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Global Search Bar
                 OutlinedTextField(
@@ -414,7 +393,6 @@ fun TagadaApp(
                             }
                         )
                     }
-
                     "calls" -> {
                         CallsScreen(
                             viewModel = viewModel,
@@ -423,8 +401,8 @@ fun TagadaApp(
                             sortType = sortType,
                             onToggleFavorite = { viewModel.repository.toggleFavorite(it) },
                             onCallClick = { contact ->
-                                viewModel.repository.recordCall(contact.id)
-                                if (contact.contactGroup == "Survey" || contact.contactGroup == "জরিপ") {
+                                viewModel.repository.recordCall(contact.id, "dialed")
+                                if (contact.contactGroup == "Survey" || contact.contactGroup == "Survey Target") {
                                     surveyNoteModalContact = contact
                                 }
                             },
@@ -435,10 +413,17 @@ fun TagadaApp(
                             onReminderClick = {
                                 reminderModalContact = it
                                 showReminderModal = true
+                            },
+                            onAddContactDirectly = { name, phone ->
+                                addContactInitialName = name
+                                addContactInitialPhone = phone
+                                showAddContactDialog = true
+                            },
+                            onOpenImportDeviceContacts = {
+                                showImportDeviceContactsModal = true
                             }
                         )
                     }
-
                     "hisab" -> {
                         HisabScreen(
                             viewModel = viewModel,
@@ -454,7 +439,6 @@ fun TagadaApp(
                             onEditTx = { editingHisabTx = it }
                         )
                     }
-
                     "followup" -> {
                         FollowUpScreen(
                             viewModel = viewModel,
@@ -463,8 +447,8 @@ fun TagadaApp(
                             surveyLeadFilter = surveyLeadFilter,
                             onToggleFavorite = { viewModel.repository.toggleFavorite(it) },
                             onCallClick = { contact ->
-                                viewModel.repository.recordCall(contact.id)
-                                if (contact.contactGroup == "Survey" || contact.contactGroup == "জরিপ") {
+                                viewModel.repository.recordCall(contact.id, "dialed")
+                                if (contact.contactGroup == "Survey" || contact.contactGroup == "Survey Target") {
                                     surveyNoteModalContact = contact
                                 }
                             },
@@ -479,7 +463,6 @@ fun TagadaApp(
                             onLeadStatusChange = { id, status -> viewModel.repository.updateContactLeadStatus(id, status) }
                         )
                     }
-
                     "settings" -> {
                         SettingsScreen(
                             viewModel = viewModel,
@@ -492,7 +475,8 @@ fun TagadaApp(
                             onGoogleClick = { showGoogleModal = true },
                             onBackupToDrive = { backupToGoogleDrive() },
                             onRestoreJson = { jsonPickerLauncher.launch("application/json") },
-                            onUploadVcf = { vcfPickerLauncher.launch("*/*") }
+                            onUploadVcf = { vcfPickerLauncher.launch("*/*") },
+                            onBatchImportContacts = { showImportDeviceContactsModal = true }
                         )
                     }
                 }
@@ -520,8 +504,8 @@ fun TagadaApp(
                 NavigationBarItem(
                     selected = activeTab == "calls",
                     onClick = { viewModel.activeTab.value = "calls" },
-                    icon = { Icon(Icons.Default.List, contentDescription = t.list, modifier = Modifier.size(20.dp)) },
-                    label = { Text(t.list, fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                    icon = { Icon(Icons.Default.PhoneCallback, contentDescription = t.list, modifier = Modifier.size(20.dp)) },
+                    label = { Text("Calls", fontSize = 9.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Color(0xFF818CF8),
                         selectedTextColor = Color(0xFF818CF8),
@@ -582,6 +566,8 @@ fun TagadaApp(
                         Button(
                             onClick = {
                                 showFabMenu = false
+                                addContactInitialName = ""
+                                addContactInitialPhone = ""
                                 showAddContactDialog = true
                             },
                             shape = RoundedCornerShape(20.dp),
@@ -591,7 +577,18 @@ fun TagadaApp(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("New Contact", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
-
+                        Button(
+                            onClick = {
+                                showFabMenu = false
+                                showImportDeviceContactsModal = true
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA))
+                        ) {
+                            Icon(Icons.Default.PhoneIphone, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Import Phonebook", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                         Button(
                             onClick = {
                                 showFabMenu = false
@@ -605,7 +602,6 @@ fun TagadaApp(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("New Ledger Entry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
-
                         Button(
                             onClick = {
                                 showFabMenu = false
@@ -621,7 +617,6 @@ fun TagadaApp(
                         }
                     }
                 }
-
                 FloatingActionButton(
                     onClick = { showFabMenu = !showFabMenu },
                     containerColor = if (showFabMenu) Color(0xFFE11D48) else Color(0xFF6366F1),
@@ -661,14 +656,65 @@ fun TagadaApp(
         }
     }
 
+    val autoIncludeInDevice by viewModel.autoIncludeInDevice.collectAsState()
+    val unimportedCount = remember(deviceContacts) { deviceContacts.count { !it.isAlreadyInCrm } }
+    var showAutoIncludePrompt by remember { mutableStateOf(false) }
+    var pendingConfirmSaveContact by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+
     // --- DIALOGS ---
+    if (pendingConfirmSaveContact != null) {
+        val (cName, cPhone, cGroup) = pendingConfirmSaveContact!!
+        ConfirmContactSaveDialog(
+            name = cName,
+            phone = cPhone,
+            group = cGroup,
+            onDismiss = { pendingConfirmSaveContact = null },
+            onConfirm = { alsoSave ->
+                viewModel.saveContact(cName, cPhone, cGroup, alsoSave)
+                pendingConfirmSaveContact = null
+            }
+        )
+    }
+
+    if (showAutoIncludePrompt && unimportedCount > 0) {
+        AutoIncludeDeviceContactsPromptDialog(
+            newContactsCount = unimportedCount,
+            onDismiss = { showAutoIncludePrompt = false },
+            onConfirmAutoIncludeAll = {
+                viewModel.autoIncludeAllDeviceContacts("General")
+                showAutoIncludePrompt = false
+            },
+            onReviewClick = {
+                showAutoIncludePrompt = false
+                showImportDeviceContactsModal = true
+            }
+        )
+    }
     if (showAddContactDialog) {
         AddContactDialog(
-            onDismiss = { showAddContactDialog = false },
-            onConfirm = { name, phone, grp ->
-                viewModel.repository.addContact(name, phone, grp)
+            initialName = addContactInitialName,
+            initialPhone = addContactInitialPhone,
+            defaultAlsoSaveToDevice = autoIncludeInDevice,
+            onDismiss = {
                 showAddContactDialog = false
-                viewModel.showToast("Contact Added Successfully")
+                addContactInitialName = ""
+                addContactInitialPhone = ""
+            },
+            onConfirm = { name, phone, grp, alsoSaveToDevice ->
+                viewModel.saveContact(name, phone, grp, alsoSaveToDevice)
+                showAddContactDialog = false
+                addContactInitialName = ""
+                addContactInitialPhone = ""
+            }
+        )
+    }
+
+    if (showImportDeviceContactsModal) {
+        DeviceContactsImportDialog(
+            deviceContacts = deviceContacts,
+            onDismiss = { showImportDeviceContactsModal = false },
+            onImport = { selected, targetGroup ->
+                viewModel.importSelectedDeviceContacts(selected, targetGroup)
             }
         )
     }
@@ -816,7 +862,13 @@ fun TagadaApp(
             received = analysisData.r,
             missedAndRejected = analysisData.m,
             top10List = analysisData.top,
-            onDismiss = { showSummaryAnalysisModal = false }
+            onDismiss = { showSummaryAnalysisModal = false },
+            onRunAiAudit = {
+                val summary = "Total Contacts: ${analysisData.total}, Dialed: ${analysisData.d}, Received: ${analysisData.r}, Missed: ${analysisData.m}. Unpaid Accounts: ${unpaidList.size}, Total Receivable: ${moneyFmt(hisabTotals["sGet"] ?: 0.0)}, Total Payable: ${moneyFmt(hisabTotals["sGive"] ?: 0.0)}."
+                viewModel.generateHighThinkingAudit(summary)
+            },
+            aiResultText = aiInsightText,
+            isAiThinking = isAiThinking
         )
     }
 
@@ -852,7 +904,7 @@ fun TagadaApp(
                                 contact = call,
                                 isCompact = true,
                                 onToggleFavorite = { viewModel.repository.toggleFavorite(call.id) },
-                                onCallClick = { viewModel.repository.recordCall(call.id) },
+                                onCallClick = { viewModel.repository.recordCall(call.id, "dialed") },
                                 onFinanceClick = { financeModalContact = call },
                                 onChangeGroup = { grp -> viewModel.repository.updateContactGroup(call.id, grp) },
                                 onHistoryClick = { historyModalContact = call },

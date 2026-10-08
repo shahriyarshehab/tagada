@@ -99,7 +99,7 @@ fun ContactCard(
                 }
 
                 // Lead qualification dots for Survey
-                if (onLeadStatusChange != null && (grp == "Survey" || grp == "জরিপ")) {
+                if (onLeadStatusChange != null && (grp == "Survey" || grp == "Survey Target")) {
                     Row(
                         modifier = Modifier
                             .background(Color(0xFF0A0F1D), RoundedCornerShape(16.dp))
@@ -153,7 +153,7 @@ fun ContactCard(
             }
 
             // Arrears Finance Banner
-            if (grp == "Arrears" || grp == "বকেয়া") {
+            if (grp == "Arrears" || grp == "Arrears Member") {
                 val fin = contact.fin
                 Row(
                     modifier = Modifier
@@ -166,18 +166,18 @@ fun ContactCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (fin?.get("bokeyaGiven") != null) "Given: ৳${fin["bokeyaGiven"]} (${fin["bokeyaGivenDate"] ?: ""})" else "+ Finance",
+                        if (fin?.get("bokeyaGiven") != null) "Given: ৳ ${fin["bokeyaGiven"]} (${fin["bokeyaGivenDate"] ?: ""})" else "+ Finance",
                         fontSize = 10.sp,
                         color = Color(0xFFFDA4AF)
                     )
                     if (fin?.get("bokeyaDue") != null) {
-                        Text("Due: ৳${fin["bokeyaDue"]}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFECDD3))
+                        Text("Due: ৳ ${fin["bokeyaDue"]}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFECDD3))
                     }
                 }
             }
 
             // Active Loan Finance Banner
-            if (grp == "Active" || grp == "চলতি") {
+            if (grp == "Active" || grp == "Active Member") {
                 val fin = contact.fin
                 Row(
                     modifier = Modifier
@@ -190,7 +190,7 @@ fun ContactCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        if (fin?.get("loanAmount") != null) "Loan: ৳${fin["loanAmount"]} (${fin["loanDate"] ?: ""})" else "+ Finance",
+                        if (fin?.get("loanAmount") != null) "Loan: ৳ ${fin["loanAmount"]} (${fin["loanDate"] ?: ""})" else "+ Finance",
                         fontSize = 10.sp,
                         color = Color(0xFFA5B4FC)
                     )
@@ -233,8 +233,7 @@ fun ContactCard(
                         onClick = onHistoryClick,
                         label = { Text("Hist", fontSize = 10.sp, color = Color(0xFF38BDF8)) }
                     )
-
-                    if (grp == "Active" || grp == "চলতি") {
+                    if (grp == "Active" || grp == "Active Member") {
                         Button(
                             onClick = { onStatusChange("paid") },
                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
@@ -258,7 +257,6 @@ fun ContactCard(
                             Text("Unpaid", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-
                     AssistChip(
                         onClick = onReminderClick,
                         label = { Text("Rem", fontSize = 10.sp, color = Color(0xFFA5B4FC)) }

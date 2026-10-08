@@ -30,6 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.*
 import com.example.ui.components.ContactCard
+import com.example.ui.components.FirestoreSecurityBadge
+import com.example.ui.components.TagadaBrandHeader
+import com.example.ui.components.TagadaLogoBadge
+import com.example.util.DeviceDataManager
 import com.example.util.NotificationScheduler
 import com.google.firebase.auth.FirebaseUser
 import java.text.SimpleDateFormat
@@ -164,6 +168,47 @@ fun DashboardScreen(
             }
         }
 
+        // Device Call & Contacts quick shortcuts
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF312E81)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.PhoneCallback, contentDescription = null, tint = Color(0xFFA5B4FC), modifier = Modifier.size(18.dp))
+                        }
+                        Column {
+                            Text("Device Call Logs & Contacts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("View missed/received calls & sync contacts", fontSize = 10.sp, color = Color.Gray)
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.activeTab.value = "calls"
+                            viewModel.callsSubTab.value = "call_log"
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                    ) {
+                        Text("View Logs", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // Hisab Khata Live Balance Banner
         item {
             Card(
@@ -199,7 +244,7 @@ fun DashboardScreen(
                                 }
                             }
                             Text(
-                                "Payable: ${moneyFmt(hisabTotals["sGive"] ?: 0.0)} · Receivable: ${moneyFmt(hisabTotals["sGet"] ?: 0.0)}",
+                                "Payable: ${moneyFmt(hisabTotals["sGive"] ?: 0.0)}   Receivable: ${moneyFmt(hisabTotals["sGet"] ?: 0.0)}",
                                 fontSize = 10.sp,
                                 color = Color.Gray
                             )
@@ -310,21 +355,21 @@ fun DashboardScreen(
                             val red = groupList.count { it.leadStatus == "red" }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 BreakDownPill(
-                                    label = "🟢 Hot",
+                                    label = "🔥 Hot",
                                     count = green,
                                     color = Color(0xFF10B981),
                                     modifier = Modifier.weight(1f),
                                     onClick = { onDrillDown("Survey (Hot Leads)", groupList.filter { it.leadStatus == "green" }) }
                                 )
                                 BreakDownPill(
-                                    label = "🟡 Warm",
+                                    label = "⚡ Warm",
                                     count = yellow,
                                     color = Color(0xFFF59E0B),
                                     modifier = Modifier.weight(1f),
                                     onClick = { onDrillDown("Survey (Warm Leads)", groupList.filter { it.leadStatus == "yellow" }) }
                                 )
                                 BreakDownPill(
-                                    label = "🔴 Reject",
+                                    label = "❌ Reject",
                                     count = red,
                                     color = Color(0xFFF43F5E),
                                     modifier = Modifier.weight(1f),
@@ -420,7 +465,6 @@ fun DashboardScreen(
             ) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(t.notes, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = quickNoteInput,
@@ -530,9 +574,48 @@ fun CallsScreen(
     onChangeGroup: (String, String) -> Unit,
     onHistoryClick: (Contact) -> Unit,
     onStatusChange: (String, String) -> Unit,
-    onReminderClick: (Contact) -> Unit
+    onReminderClick: (Contact) -> Unit,
+    onAddContactDirectly: (name: String, phone: String) -> Unit,
+    onOpenImportDeviceContacts: () -> Unit
 ) {
-    val filtered = remember(contacts, globalSearch, sortType) {
+    val context = LocalContext.current
+    val callsSubTab by viewModel.callsSubTab.collectAsState()
+    val callLogFilter by viewModel.callLogFilter.collectAsState()
+    val deviceCallLogs by viewModel.deviceCallLogs.collectAsState()
+    val deviceContacts by viewModel.deviceContacts.collectAsState()
+    val isLoadingDeviceData by viewModel.isLoadingDeviceData.collectAsState()
+
+    var hasContactsPermission by remember { mutableStateOf(DeviceDataManager.hasContactsPermission(context)) }
+    var hasCallLogPermission by remember { mutableStateOf(DeviceDataManager.hasCallLogPermission(context)) }
+
+    val contactsPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasContactsPermission = isGranted
+        if (isGranted) {
+            viewModel.showToast("Contacts permission granted!")
+            viewModel.loadDeviceData()
+        }
+    }
+
+    val callLogPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCallLogPermission = isGranted
+        if (isGranted) {
+            viewModel.showToast("Call log permission granted!")
+            viewModel.loadDeviceData()
+        }
+    }
+
+    // Auto load device data on first entry if permission exists
+    LaunchedEffect(hasCallLogPermission, hasContactsPermission) {
+        if (hasCallLogPermission || hasContactsPermission) {
+            viewModel.loadDeviceData()
+        }
+    }
+
+    val filteredContacts = remember(contacts, globalSearch, sortType) {
         contacts
             .filter { c ->
                 globalSearch.isBlank() ||
@@ -549,46 +632,423 @@ fun CallsScreen(
             }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("${filtered.size} Contacts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.LightGray)
-
-            var expandedSort by remember { mutableStateOf(false) }
-            Box {
-                AssistChip(
-                    onClick = { expandedSort = true },
-                    label = { Text("Sort: $sortType", fontSize = 10.sp) }
-                )
-                DropdownMenu(expanded = expandedSort, onDismissRequest = { expandedSort = false }) {
-                    DropdownMenuItem(text = { Text("Newest First") }, onClick = { viewModel.sortType.value = "newest"; expandedSort = false })
-                    DropdownMenuItem(text = { Text("Most Talked") }, onClick = { viewModel.sortType.value = "most-talked"; expandedSort = false })
-                    DropdownMenuItem(text = { Text("Name (A-Z)") }, onClick = { viewModel.sortType.value = "a-z"; expandedSort = false })
-                    DropdownMenuItem(text = { Text("Name (Z-A)") }, onClick = { viewModel.sortType.value = "z-a"; expandedSort = false })
-                }
+    val filteredCallLogs = remember(deviceCallLogs, callLogFilter, globalSearch) {
+        deviceCallLogs.filter { log ->
+            val matchesFilter = when (callLogFilter) {
+                "missed" -> log.type == DeviceCallType.MISSED
+                "received" -> log.type == DeviceCallType.INCOMING
+                "dialed" -> log.type == DeviceCallType.OUTGOING
+                else -> true
             }
+            val matchesSearch = globalSearch.isBlank() ||
+                    (log.name?.contains(globalSearch, ignoreCase = true) == true) ||
+                    log.number.contains(globalSearch)
+            matchesFilter && matchesSearch
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        // Sub-tabs: "CRM Contacts" vs "Device Call Log" vs "Device Contacts"
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(
+                selected = callsSubTab == "crm_contacts",
+                onClick = { viewModel.callsSubTab.value = "crm_contacts" },
+                label = { Text("CRM Contacts (${contacts.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = callsSubTab == "call_log",
+                onClick = {
+                    viewModel.callsSubTab.value = "call_log"
+                    if (hasCallLogPermission) viewModel.loadDeviceData()
+                },
+                label = { Text("Call History (${deviceCallLogs.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = callsSubTab == "device_contacts",
+                onClick = {
+                    viewModel.callsSubTab.value = "device_contacts"
+                    if (hasContactsPermission) viewModel.loadDeviceData()
+                },
+                label = { Text("Device (${deviceContacts.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                modifier = Modifier.weight(1f)
+            )
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
-            items(filtered, key = { it.id }) { call ->
-                ContactCard(
-                    contact = call,
-                    isCompact = true,
-                    onToggleFavorite = { onToggleFavorite(call.id) },
-                    onCallClick = { onCallClick(call) },
-                    onFinanceClick = { onFinanceClick(call) },
-                    onChangeGroup = { grp -> onChangeGroup(call.id, grp) },
-                    onHistoryClick = { onHistoryClick(call) },
-                    onStatusChange = { st -> onStatusChange(call.id, st) },
-                    onReminderClick = { onReminderClick(call) }
-                )
+        when (callsSubTab) {
+            "crm_contacts" -> {
+                // Header with Count & Sort Menu
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${filteredContacts.size} Contacts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.LightGray)
+                    var expandedSort by remember { mutableStateOf(false) }
+                    Box {
+                        AssistChip(
+                            onClick = { expandedSort = true },
+                            label = { Text("Sort: $sortType", fontSize = 10.sp) }
+                        )
+                        DropdownMenu(expanded = expandedSort, onDismissRequest = { expandedSort = false }) {
+                            DropdownMenuItem(text = { Text("Newest First") }, onClick = { viewModel.sortType.value = "newest"; expandedSort = false })
+                            DropdownMenuItem(text = { Text("Most Talked") }, onClick = { viewModel.sortType.value = "most-talked"; expandedSort = false })
+                            DropdownMenuItem(text = { Text("Name (A-Z)") }, onClick = { viewModel.sortType.value = "a-z"; expandedSort = false })
+                            DropdownMenuItem(text = { Text("Name (Z-A)") }, onClick = { viewModel.sortType.value = "z-a"; expandedSort = false })
+                        }
+                    }
+                }
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                    items(filteredContacts, key = { it.id }) { call ->
+                        ContactCard(
+                            contact = call,
+                            isCompact = true,
+                            onToggleFavorite = { onToggleFavorite(call.id) },
+                            onCallClick = { onCallClick(call) },
+                            onFinanceClick = { onFinanceClick(call) },
+                            onChangeGroup = { grp -> onChangeGroup(call.id, grp) },
+                            onHistoryClick = { onHistoryClick(call) },
+                            onStatusChange = { st -> onStatusChange(call.id, st) },
+                            onReminderClick = { onReminderClick(call) }
+                        )
+                    }
+                    if (filteredContacts.isEmpty()) {
+                        item {
+                            Text("No contacts found", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(24.dp))
+                        }
+                    }
+                }
             }
-            if (filtered.isEmpty()) {
-                item {
-                    Text("No contacts found", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(24.dp))
+
+            "call_log" -> {
+                // Call Log View
+                if (!hasCallLogPermission) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4338CA))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.PhoneCallback, contentDescription = null, tint = Color(0xFFA5B4FC))
+                                Text("Call History Permission Needed", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                            Text(
+                                "To view missed calls, received calls, and dialed call details directly in Tagada CRM, please grant the Call Log permission.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFC7D2FE),
+                                lineHeight = 16.sp
+                            )
+                            Button(
+                                onClick = { callLogPermLauncher.launch(Manifest.permission.READ_CALL_LOG) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            ) {
+                                Text("Grant Call Log Permission", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    // Filters & Sync action row
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LazyRow(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("all" to "All", "missed" to "Missed", "received" to "Received", "dialed" to "Dialed").forEach { (valKey, label) ->
+                                val selected = callLogFilter == valKey
+                                item {
+                                    AssistChip(
+                                        onClick = { viewModel.callLogFilter.value = valKey },
+                                        label = { Text(label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = if (selected) Color(0xFF312E81) else Color.Transparent,
+                                            labelColor = if (selected) Color(0xFFA5B4FC) else Color.Gray
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.syncCallHistoryFromDevice() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Sync CRM", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (isLoadingDeviceData) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFF6366F1))
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                            items(filteredCallLogs, key = { it.id }) { log ->
+                                val (badgeColor, badgeText, badgeIcon) = when (log.type) {
+                                    DeviceCallType.MISSED -> Triple(Color(0xFFEF4444), "MISSED", Icons.Default.CallMissed)
+                                    DeviceCallType.INCOMING -> Triple(Color(0xFF38BDF8), "RECEIVED", Icons.Default.CallReceived)
+                                    DeviceCallType.OUTGOING -> Triple(Color(0xFF10B981), "DIALED", Icons.Default.CallMade)
+                                    DeviceCallType.REJECTED -> Triple(Color(0xFFF59E0B), "REJECTED", Icons.Default.CallEnd)
+                                    DeviceCallType.OTHER -> Triple(Color.Gray, "CALL", Icons.Default.Phone)
+                                }
+
+                                val isAlreadyInCrm = contacts.any { DeviceDataManager.normalizeMatch(it.phone, log.number) }
+
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier.size(36.dp).clip(CircleShape).background(badgeColor.copy(alpha = 0.2f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(badgeIcon, contentDescription = null, tint = badgeColor, modifier = Modifier.size(18.dp))
+                                            }
+
+                                            Column {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text(
+                                                        log.name ?: log.number,
+                                                        fontSize = 13.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White
+                                                    )
+                                                    Box(
+                                                        modifier = Modifier.background(badgeColor.copy(alpha = 0.2f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    ) {
+                                                        Text(badgeText, fontSize = 8.sp, fontWeight = FontWeight.Bold, color = badgeColor)
+                                                    }
+                                                }
+                                                if (log.name != null) {
+                                                    Text(log.number, fontSize = 11.sp, color = Color.Gray)
+                                                }
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(DeviceDataManager.formatCallDate(log.dateMillis), fontSize = 10.sp, color = Color.Gray)
+                                                    if (log.type != DeviceCallType.MISSED && log.durationSeconds > 0) {
+                                                        Text("• ${DeviceDataManager.formatDuration(log.durationSeconds)}", fontSize = 10.sp, color = Color(0xFFA5B4FC))
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (!isAlreadyInCrm) {
+                                                Button(
+                                                    onClick = {
+                                                        onAddContactDirectly(log.name ?: "Contact", log.number)
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                    modifier = Modifier.height(28.dp),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF312E81))
+                                                ) {
+                                                    Text("+ CRM", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC7D2FE))
+                                                }
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${log.number}"))
+                                                    context.startActivity(intent)
+                                                },
+                                                modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF10B981))
+                                            ) {
+                                                Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (filteredCallLogs.isEmpty()) {
+                                item {
+                                    Text("No call history records found", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(24.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            "device_contacts" -> {
+                // Device Contacts View
+                if (!hasContactsPermission) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4338CA))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Contacts, contentDescription = null, tint = Color(0xFFA5B4FC))
+                                Text("Contacts Permission Needed", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                            Text(
+                                "To load device contacts into Tagada CRM, please grant the Contacts permission.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFC7D2FE),
+                                lineHeight = 16.sp
+                            )
+                            Button(
+                                onClick = { contactsPermLauncher.launch(Manifest.permission.READ_CONTACTS) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            ) {
+                                Text("Grant Contacts Permission", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    val unimportedContacts = remember(deviceContacts) {
+                        deviceContacts.filter { !it.isAlreadyInCrm }
+                    }
+
+                    if (unimportedContacts.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF059669))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("${unimportedContacts.size} Unimported Phone Contacts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA7F3D0))
+                                    Text("Auto-include all phone contacts into Tagada CRM", fontSize = 10.sp, color = Color(0xFFD1FAE5))
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.autoIncludeAllDeviceContacts("General")
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                                ) {
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Auto-Include All", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${deviceContacts.size} Device Contacts (${unimportedContacts.size} new)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.LightGray)
+                        Button(
+                            onClick = onOpenImportDeviceContacts,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Batch Import", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (isLoadingDeviceData) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFF6366F1))
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 80.dp)) {
+                            items(deviceContacts, key = { it.id }) { dc ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text(dc.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                                if (dc.isAlreadyInCrm) {
+                                                    Box(
+                                                        modifier = Modifier.background(Color(0xFF065F46), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    ) {
+                                                        Text("IN CRM", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFFA7F3D0))
+                                                    }
+                                                }
+                                            }
+                                            Text(dc.phone, fontSize = 11.sp, color = Color.Gray)
+                                        }
+
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (!dc.isAlreadyInCrm) {
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.repository.addContact(dc.name, dc.phone, "General")
+                                                        viewModel.showToast("${dc.name} added to CRM")
+                                                        viewModel.loadDeviceData()
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.height(28.dp),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                                                ) {
+                                                    Text("+ CRM", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${dc.phone}"))
+                                                    context.startActivity(intent)
+                                                },
+                                                modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFF10B981))
+                                            ) {
+                                                Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (deviceContacts.isEmpty()) {
+                                item {
+                                    Text("No device contacts found", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(24.dp))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -697,14 +1157,14 @@ fun HisabScreen(
                         FilterChip(
                             selected = hisabSubTab == "notes",
                             onClick = { viewModel.hisabSubTab.value = "notes" },
-                            label = { Text("Smart Advice 💡", fontSize = 11.sp) }
+                            label = { Text("Smart Advice ✨", fontSize = 11.sp) }
                         )
                     }
                     item {
                         FilterChip(
                             selected = hisabSubTab == "reminders",
                             onClick = { viewModel.hisabSubTab.value = "reminders" },
-                            label = { Text("Due Alerts 🔔", fontSize = 11.sp) }
+                            label = { Text("Due Alerts ⏰", fontSize = 11.sp) }
                         )
                     }
                 }
@@ -757,7 +1217,6 @@ fun HisabScreen(
                         singleLine = true
                     )
                 }
-
                 items(filteredPeople) { p ->
                     Row(
                         modifier = Modifier
@@ -776,7 +1235,7 @@ fun HisabScreen(
                                     Text("📞 ${p.phones.first()}", fontSize = 9.sp, color = Color(0xFF34D399))
                                 }
                             }
-                            Text("Received ${moneyFmt(p.inn)} · Deposited ${moneyFmt(p.dep)}", fontSize = 10.sp, color = Color.Gray)
+                            Text("Received ${moneyFmt(p.inn)} • Deposited ${moneyFmt(p.dep)}", fontSize = 10.sp, color = Color.Gray)
                         }
                         Box(
                             modifier = Modifier
@@ -875,7 +1334,7 @@ fun HisabScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(t.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("${dtFmt(t.date)} ${if (t.note.isNotBlank()) "· ${t.note}" else ""}", fontSize = 10.sp, color = Color.Gray)
+                            Text("${dtFmt(t.date)} ${if (t.note.isNotBlank()) "• ${t.note}" else ""}", fontSize = 10.sp, color = Color.Gray)
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Edit", fontSize = 10.sp, color = Color(0xFF818CF8), modifier = Modifier.clickable { onEditTx(t) })
                                 Text("Delete", fontSize = 10.sp, color = Color(0xFFF87171), modifier = Modifier.clickable { viewModel.repository.deleteHisabTx(t.id) })
@@ -971,7 +1430,7 @@ fun HisabScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(t.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("${dtFmt(t.date)} ${if (t.src.isNotBlank()) "· Source: ${t.src}" else ""} ${if (t.note.isNotBlank()) "· ${t.note}" else ""}", fontSize = 10.sp, color = Color.Gray)
+                            Text("${dtFmt(t.date)} ${if (t.src.isNotBlank()) "• Source: ${t.src}" else ""} ${if (t.note.isNotBlank()) "• ${t.note}" else ""}", fontSize = 10.sp, color = Color.Gray)
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Edit", fontSize = 10.sp, color = Color(0xFF818CF8), modifier = Modifier.clickable { onEditTx(t) })
                                 Text("Delete", fontSize = 10.sp, color = Color(0xFFF87171), modifier = Modifier.clickable { viewModel.repository.deleteHisabTx(t.id) })
@@ -990,7 +1449,6 @@ fun HisabScreen(
                         color = Color.LightGray
                     )
                 }
-
                 items(adviceList) { adv ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -999,12 +1457,11 @@ fun HisabScreen(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                "${adv.person} gave ${moneyFmt(adv.inn)}, but deposited ${moneyFmt(adv.dep)} — ${moneyFmt(adv.inn - adv.dep)} pending.",
+                                "${adv.person} gave ${moneyFmt(adv.inn)}, but deposited ${moneyFmt(adv.dep)} → ${moneyFmt(adv.inn - adv.dep)} pending.",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
-
                             for (sug in adv.suggestions) {
                                 Column(
                                     modifier = Modifier
@@ -1061,7 +1518,6 @@ fun HisabScreen(
                         }
                     }
                 }
-
                 item { Text("Upcoming & Scheduled Alerts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
                 items(hisabReminders) { r ->
                     Row(
@@ -1116,7 +1572,6 @@ fun FollowUpScreen(
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Follow-up & Lead Pipeline", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
-
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(CONTACT_GROUPS) { g ->
                     FilterChip(
@@ -1129,10 +1584,9 @@ fun FollowUpScreen(
                     )
                 }
             }
-
             if (followUpGroupFilter == "Survey") {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("all" to "All Leads", "green" to "🟢 Hot", "yellow" to "🟡 Warm", "red" to "🔴 Disqualify").forEach { (valKey, lbl) ->
+                    listOf("all" to "All Leads", "green" to "🔥 Hot", "yellow" to "⚡ Warm", "red" to "❌ Disqualify").forEach { (valKey, lbl) ->
                         FilterChip(
                             selected = surveyLeadFilter == valKey,
                             onClick = { viewModel.surveyLeadFilter.value = valKey },
@@ -1180,18 +1634,66 @@ fun SettingsScreen(
     onGoogleClick: () -> Unit,
     onBackupToDrive: () -> Unit,
     onRestoreJson: () -> Unit,
-    onUploadVcf: () -> Unit
+    onUploadVcf: () -> Unit,
+    onBatchImportContacts: () -> Unit
 ) {
+    val context = LocalContext.current
+    var hasNotifPermission by remember { mutableStateOf(NotificationScheduler.hasNotificationPermission(context)) }
+    var hasContactsPermission by remember { mutableStateOf(DeviceDataManager.hasContactsPermission(context)) }
+    var hasCallLogPermission by remember { mutableStateOf(DeviceDataManager.hasCallLogPermission(context)) }
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotifPermission = isGranted
+        if (isGranted) viewModel.showToast("Notification permission granted!")
+    }
+
+    val contactsPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasContactsPermission = isGranted
+        if (isGranted) {
+            viewModel.showToast("Contacts permission granted!")
+            viewModel.loadDeviceData()
+        }
+    }
+
+    val callLogPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCallLogPermission = isGranted
+        if (isGranted) {
+            viewModel.showToast("Call log permission granted!")
+            viewModel.loadDeviceData()
+        }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(top = 14.dp, bottom = 80.dp)
     ) {
+        // Tagada Official Brand & Cloud Security Banner
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TagadaBrandHeader(title = t.appName, subtitle = t.appSubtitle)
+                    FirestoreSecurityBadge(isCloudSynced = currentUser != null)
+                }
+            }
+        }
+
         item {
             Text(t.settings, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
 
-        // Google Account Card
+        // Google Account & Firestore Card
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -1218,6 +1720,16 @@ fun SettingsScreen(
                     }
 
                     if (currentUser != null) {
+                        Button(
+                            onClick = { viewModel.forceSecureFirestoreSync() },
+                            modifier = Modifier.fillMaxWidth().testTag("force_firestore_sync_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                        ) {
+                            Icon(Icons.Default.CloudDone, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Force Secure Firestore Cloud Sync", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = onBackupToDrive,
@@ -1264,44 +1776,190 @@ fun SettingsScreen(
             }
         }
 
-        // VCF Import Card
+        // Device Permissions & Data Sync Card (Contacts & Call Logs)
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(t.vcfUploadSettings, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(t.vcfUploadDesc, fontSize = 10.sp, color = Color.Gray)
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        var expandedGroup by remember { mutableStateOf(false) }
-                        Box {
-                            AssistChip(
-                                onClick = { expandedGroup = true },
-                                label = { Text(settingsGroupTarget, fontSize = 11.sp) }
-                            )
-                            DropdownMenu(expanded = expandedGroup, onDismissRequest = { expandedGroup = false }) {
-                                CONTACT_GROUPS.forEach { g ->
-                                    DropdownMenuItem(
-                                        text = { Text(g) },
-                                        onClick = {
-                                            onSettingsGroupTargetChange(g)
-                                            expandedGroup = false
-                                        }
-                                    )
-                                }
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.PhoneIphone, contentDescription = null, tint = Color(0xFF818CF8), modifier = Modifier.size(20.dp))
+                            Column {
+                                Text("Device Permissions & Call Sync", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Required to load device contacts & call history", fontSize = 10.sp, color = Color.Gray)
                             }
                         }
+                    }
 
+                    // Contacts Permission Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Contacts Permission", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (hasContactsPermission) "Granted • Can read device phonebook" else "Not Granted",
+                                fontSize = 10.sp,
+                                color = if (hasContactsPermission) Color(0xFF34D399) else Color(0xFFF87171)
+                            )
+                        }
+                        if (!hasContactsPermission) {
+                            Button(
+                                onClick = { contactsPermLauncher.launch(Manifest.permission.READ_CONTACTS) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            ) {
+                                Text("Grant", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = onBatchImportContacts,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF312E81))
+                            ) {
+                                Text("Import Contacts", fontSize = 10.sp, color = Color(0xFFC7D2FE))
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0xFF1E293B))
+
+                    // Call History Permission Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Call History Permission", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (hasCallLogPermission) "Granted • Can read missed & received calls" else "Not Granted",
+                                fontSize = 10.sp,
+                                color = if (hasCallLogPermission) Color(0xFF34D399) else Color(0xFFF87171)
+                            )
+                        }
+                        if (!hasCallLogPermission) {
+                            Button(
+                                onClick = { callLogPermLauncher.launch(Manifest.permission.READ_CALL_LOG) },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            ) {
+                                Text("Grant", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    viewModel.syncCallHistoryFromDevice()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                            ) {
+                                Text("Sync Call Logs", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0xFF1E293B))
+
+                    // Auto-include toggle
+                    val autoIncludeInDevice by viewModel.autoIncludeInDevice.collectAsState()
+                    val autoIncludePhoneToApp by viewModel.autoIncludePhoneToApp.collectAsState()
+                    val askConfirmationBeforeSave by viewModel.askConfirmationBeforeSave.collectAsState()
+                    val deviceContacts by viewModel.deviceContacts.collectAsState()
+                    val unimportedCount = remember(deviceContacts) { deviceContacts.count { !it.isAlreadyInCrm } }
+
+                    val writeContactsLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        if (isGranted) viewModel.setAutoIncludeInDevice(true)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Auto-include in Phone Contacts", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Automatically save new CRM contacts into phonebook", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = autoIncludeInDevice,
+                            onCheckedChange = { checked ->
+                                if (checked && !DeviceDataManager.hasWriteContactsPermission(context)) {
+                                    writeContactsLauncher.launch(Manifest.permission.WRITE_CONTACTS)
+                                } else {
+                                    viewModel.setAutoIncludeInDevice(checked)
+                                }
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF1E293B))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Auto-include Phone Contacts to CRM", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Prompt and auto-detect new phone contacts", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = autoIncludePhoneToApp,
+                            onCheckedChange = { checked ->
+                                viewModel.setAutoIncludePhoneToApp(checked)
+                            }
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF1E293B))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Confirm Before Auto-Saving", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text("Display confirmation choice dialog when adding contacts", fontSize = 10.sp, color = Color.Gray)
+                        }
+                        Switch(
+                            checked = askConfirmationBeforeSave,
+                            onCheckedChange = { checked ->
+                                viewModel.setAskConfirmationBeforeSave(checked)
+                            }
+                        )
+                    }
+
+                    if (unimportedCount > 0) {
                         Button(
-                            onClick = onUploadVcf,
-                            modifier = Modifier.weight(1f),
+                            onClick = { viewModel.autoIncludeAllDeviceContacts("General") },
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                         ) {
-                            Text("Upload VCF File", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Confirm & Auto-Include $unimportedCount Phone Contacts", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1310,15 +1968,6 @@ fun SettingsScreen(
 
         // Notification Settings Card
         item {
-            val context = LocalContext.current
-            var hasNotifPermission by remember { mutableStateOf(NotificationScheduler.hasNotificationPermission(context)) }
-            val notifLauncher = rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { isGranted ->
-                hasNotifPermission = isGranted
-                if (isGranted) viewModel.showToast("Notification permission granted!")
-            }
-
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
@@ -1354,7 +2003,6 @@ fun SettingsScreen(
                                 Text("Enable Notifications", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-
                         Button(
                             onClick = {
                                 NotificationScheduler.triggerImmediateNotification(
@@ -1370,6 +2018,48 @@ fun SettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B))
                         ) {
                             Text("Send Test Alert", fontSize = 11.sp, color = Color(0xFFC7D2FE), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // VCF Import Card
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF111827)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(t.vcfUploadSettings, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(t.vcfUploadDesc, fontSize = 10.sp, color = Color.Gray)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        var expandedGroup by remember { mutableStateOf(false) }
+                        Box {
+                            AssistChip(
+                                onClick = { expandedGroup = true },
+                                label = { Text(settingsGroupTarget, fontSize = 11.sp) }
+                            )
+                            DropdownMenu(expanded = expandedGroup, onDismissRequest = { expandedGroup = false }) {
+                                CONTACT_GROUPS.forEach { g ->
+                                    DropdownMenuItem(
+                                        text = { Text(g) },
+                                        onClick = {
+                                            onSettingsGroupTargetChange(g)
+                                            expandedGroup = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = onUploadVcf,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1))
+                        ) {
+                            Text("Upload VCF File", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1395,9 +2085,7 @@ fun SettingsScreen(
                             onCheckedChange = { viewModel.darkMode.value = it }
                         )
                     }
-
                     HorizontalDivider(color = Color(0xFF1E293B))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1422,7 +2110,7 @@ fun SettingsScreen(
 
         item {
             Text(
-                "Tagada v2.1 • Smart Call & Hisab Khata CRM",
+                "Tagada v2.2 • Smart Call & Hisab Khata CRM with Device Sync",
                 fontSize = 10.sp,
                 color = Color.Gray,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp),

@@ -1,7 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     // Default-deny safety net
     match /{document=**} {
       allow read, write: if false;

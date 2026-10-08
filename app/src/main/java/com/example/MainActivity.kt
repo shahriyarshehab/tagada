@@ -21,7 +21,6 @@ import com.example.ui.TagadaViewModel
 import com.example.ui.theme.TagadaTheme
 
 class MainActivity : ComponentActivity() {
-
     private val viewModel: TagadaViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,7 +43,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val darkMode by viewModel.darkMode.collectAsState()
-
             TagadaTheme(darkTheme = darkMode) {
                 Scaffold(
                     modifier = Modifier

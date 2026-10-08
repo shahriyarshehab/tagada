@@ -13,7 +13,6 @@ import com.example.MainActivity
 import com.example.R
 
 class ReminderNotificationReceiver : BroadcastReceiver() {
-
     override fun onReceive(context: Context, intent: Intent) {
         val reminderId = intent.getStringExtra(EXTRA_REMINDER_ID) ?: ""
         val name = intent.getStringExtra(EXTRA_NAME) ?: "Contact"
@@ -49,7 +48,7 @@ class ReminderNotificationReceiver : BroadcastReceiver() {
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("📞 Follow-up: $name")
+            .setContentTitle("Follow-up: $name")
             .setContentText(if (note.isNotBlank()) "$note ($phone)" else "Time to call $name ($phone)")
             .setStyle(
                 NotificationCompat.BigTextStyle()

@@ -1,6 +1,6 @@
 {
   "name": "Tagada",
-  "description": "Smart Call & Hisab Khata CRM with Google Drive and cloud sync",
+  "description": "Smart Call & Hisab Khata CRM with device contacts, call history tracking, and cloud sync",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -77,7 +77,7 @@ abstract class FirestoreEmulatorTestBase {
     }
   }
 
-  private companion object {
+  protected companion object {
     const val EMULATOR_HOST = "127.0.0.1"
     const val FIRESTORE_PORT = 8085
     const val AUTH_PORT = 9099
